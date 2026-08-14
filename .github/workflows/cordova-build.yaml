@@ -24,6 +24,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -36,6 +41,8 @@ jobs:
         run: cordova platform add android --nosave || true
 
       - name: Build Android APK
+        env:
+          CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL: "https://services.gradle.org/distributions/gradle-8.7-bin.zip"
         run: cordova build android --debug
 
       - name: Upload APK Artifact
