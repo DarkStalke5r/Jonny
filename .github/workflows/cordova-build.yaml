@@ -31,6 +31,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;33.0.2 platforms;android-33'
 
       - name: Install Cordova and dependencies
         run: |
