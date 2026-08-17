@@ -1,7 +1,7 @@
 {
-  "name": "com.example.testapp",
-  "displayName": "TestApp",
-  "version": "1.0.0",
+  "name": "com.tower.testapp",
+  "displayName": "гⷮлⷬаⷶдⷯиⷶтⷮьꙺ",
+  "version": "0.4.04",
   "description": "Тестовое приложение Cordova",
   "main": "index.html",
   "dependencies": {
