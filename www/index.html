@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Тетрис-башня</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            color: #fff;
+        }
+        #app {
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+            max-height: 800px;
+            position: relative;
+            background: #16213e;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #1a1a2e;
+        }
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(22, 33, 62, 0.95);
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+        .screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .btn {
+            display: block;
+            width: 200px;
+            padding: 14px 20px;
+            margin: 12px auto;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 30px;
+            background: #e94560;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            text-align: center;
+            pointer-events: auto;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            background: #c73a52;
+        }
+        .btn.secondary {
+            background: #2d4059;
+        }
+        .btn.secondary:active {
+            background: #1f2d44;
+        }
+        #menu h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 80%;
+            margin: 15px 0;
+        }
+        .setting-row label {
+            font-size: 1.2rem;
+        }
+        .toggle {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            background: #2d4059;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .toggle.active {
+            background: #e94560;
+        }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            transition: left 0.3s;
+        }
+        .toggle.active::after {
+            left: 25px;
+        }
+        #settings h2 {
+            margin-bottom: 25px;
+        }
+        #gameOver {
+            background: rgba(0,0,0,0.7);
+            z-index: 20;
+        }
+        #gameOver h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="menu" class="screen">
+            <h1>Тетрис-башня</h1>
+            <button class="btn" id="playBtn">Играть</button>
+            <button class="btn secondary" id="settingsBtn">Настройки</button>
+        </div>
+
+        <div id="settings" class="screen hidden">
+            <h2>Настройки</h2>
+            <div class="setting-row">
+                <label>Музыка</label>
+                <div class="toggle" id="musicToggle"></div>
+            </div>
+            <div class="setting-row">
+                <label>Звук размещения</label>
+                <div class="toggle active" id="placeSoundToggle"></div>
+            </div>
+            <div class="setting-row">
+                <label>Звук проигрыша</label>
+                <div class="toggle active" id="gameOverSoundToggle"></div>
+            </div>
+            <button class="btn secondary" id="backBtn">Назад</button>
+        </div>
+
+        <div id="gameOver" class="screen hidden">
+            <h2>Башня упала!</h2>
+            <button class="btn" id="restartBtn">Заново</button>
+            <button class="btn secondary" id="menuBtn">В меню</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const menuScreen = document.getElementById('menu');
+            const settingsScreen = document.getElementById('settings');
+            const gameOverScreen = document.getElementById('gameOver');
+            const playBtn = document.getElementById('playBtn');
+            const settingsBtn = document.getElementById('settingsBtn');
+            const backBtn = document.getElementById('backBtn');
+            const restartBtn = document.getElementById('restartBtn');
+            const menuBtn = document.getElementById('menuBtn');
+
+            const musicToggle = document.getElementById('musicToggle');
+            const placeSoundToggle = document.getElementById('placeSoundToggle');
+            const gameOverSoundToggle = document.getElementById('gameOverSoundToggle');
+
+            const W = canvas.width = canvas.clientWidth || 500;
+            const H = canvas.height = canvas.clientHeight || 800;
+            canvas.width = W;
+            canvas.height = H;
+
+            const BLOCK_SIZE = 24;
+            const COLLIDER_SIZE = BLOCK_SIZE - 1;
+            const SLOT_HEIGHT = H * 0.22;
+            const SLOT_MARGIN = 10;
+            const SLOT_COUNT = 3;
+            const TOP_LIMIT = -20;
+            const OVERLAP_TOLERANCE = 1;
+
+            const PLATFORM_PIECE_SIZE = 2;
+            const PLATFORM_COUNT = 3;
+            const PLATFORM_WIDTH = PLATFORM_PIECE_SIZE * BLOCK_SIZE * PLATFORM_COUNT;
+            const PLATFORM_LEFT = Math.round((W - PLATFORM_WIDTH) / (2 * BLOCK_SIZE)) * BLOCK_SIZE;
+            const GROUND_Y = H * 0.55;
+
+            let musicEnabled = false;
+            let placeSoundEnabled = true;
+            let gameOverSoundEnabled = true;
+
+            let gameRunning = false;
+            let gameInitialized = false;
+            let draggedSlotIndex = -1;
+            let dragWorldPos = { x: 0, y: 0 };
+            let pieces = [];
+            let platformBodies = [];
+
+            const engine = Matter.Engine.create();
+            const world = engine.world;
+            engine.gravity.y = 1.0;
+            engine.positionIterations = 20;
+            engine.velocityIterations = 15;
+            engine.constraintIterations = 6;
+            engine.enableSleeping = true;
+            Matter.Resolver._restingThresh = 2;
+
+            let audioCtx = null;
+            let musicGainNode = null;
+            let musicTimer = null;
+
+            function ensureAudioContext() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                return audioCtx;
+            }
+
+            function playPlaceSound() {
+                if (!placeSoundEnabled) return;
+                try {
+                    const ctx = ensureAudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.value = 800;
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+                    osc.connect(gain).connect(ctx.destination);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.1);
+                } catch (e) {}
+            }
+
+            function playGameOverSound() {
+                if (!gameOverSoundEnabled) return;
+                try {
+                    const ctx = ensureAudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = 200;
+                    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+                    osc.connect(gain).connect(ctx.destination);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.8);
+                } catch (e) {}
+            }
+
+            function startMusic() {
+                if (!musicEnabled) return;
+                stopMusic();
+                try {
+                    const ctx = ensureAudioContext();
+                    musicGainNode = ctx.createGain();
+                    musicGainNode.gain.value = 0.15;
+                    musicGainNode.connect(ctx.destination);
+                    const notes = [262, 294, 330, 349, 392, 440, 494, 523];
+                    let noteIndex = 0;
+                    function playNextNote() {
+                        const osc = ctx.createOscillator();
+                        const noteGain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = notes[noteIndex % notes.length];
+                        noteGain.gain.setValueAtTime(0, ctx.currentTime);
+                        noteGain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1);
+                        noteGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+                        osc.connect(noteGain).connect(musicGainNode);
+                        osc.start(ctx.currentTime);
+                        osc.stop(ctx.currentTime + 0.6);
+                        noteIndex++;
+                        musicTimer = setTimeout(playNextNote, 500);
+                    }
+                    playNextNote();
+                } catch (e) {}
+            }
+
+            function stopMusic() {
+                if (musicTimer) {
+                    clearTimeout(musicTimer);
+                    musicTimer = null;
+                }
+                if (musicGainNode) {
+                    musicGainNode.disconnect();
+                    musicGainNode = null;
+                }
+            }
+
+            const SHAPES = {
+                I: [[0,0], [0,1], [0,2], [0,3]],
+                O: [[0,0], [0,1], [1,0], [1,1]],
+                T: [[0,1], [1,0], [1,1], [1,2]],
+                S: [[0,1], [0,2], [1,0], [1,1]],
+                Z: [[0,0], [0,1], [1,1], [1,2]],
+                J: [[0,0], [1,0], [1,1], [1,2]],
+                L: [[0,2], [1,0], [1,1], [1,2]]
+            };
+            const SHAPE_TYPES = Object.keys(SHAPES);
+            const COLORS = {
+                I: '#00d2ff',
+                O: '#ffd700',
+                T: '#b366ff',
+                S: '#00ff88',
+                Z: '#ff5555',
+                J: '#ff9f43',
+                L: '#54a0ff'
+            };
+
+            let slots = [];
+
+            function randomShapeType() {
+                return SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)];
+            }
+
+            function rotateShape(shape) {
+                let maxRow = 0, maxCol = 0;
+                for (const [r, c] of shape) {
+                    if (r > maxRow) maxRow = r;
+                    if (c > maxCol) maxCol = c;
+                }
+                return shape.map(([r, c]) => [c, maxRow - r]);
+            }
+
+            function getCurrentShape(type, rotation = 0) {
+                let shape = SHAPES[type];
+                for (let i = 0; i < rotation; i++) {
+                    shape = rotateShape(shape);
+                }
+                return shape;
+            }
+
+            function getShapeCenter(shape) {
+                let sumR = 0, sumC = 0;
+                for (const [r, c] of shape) {
+                    sumR += r;
+                    sumC += c;
+                }
+                return {
+                    centerRow: sumR / shape.length,
+                    centerCol: sumC / shape.length
+                };
+            }
+
+            function initSlots() {
+                slots = [];
+                for (let i = 0; i < SLOT_COUNT; i++) {
+                    slots.push({
+                        type: randomShapeType(),
+                        x: (W / SLOT_COUNT) * i + (W / SLOT_COUNT) / 2,
+                        y: H - SLOT_HEIGHT / 2,
+                        width: (W / SLOT_COUNT) - SLOT_MARGIN,
+                        height: SLOT_HEIGHT - SLOT_MARGIN * 2,
+                        rotation: 0
+                    });
+                }
+            }
+
+            function createPiece(type, centerX, centerY, rotation = 0) {
+                const shape = getCurrentShape(type, rotation);
+                const { centerRow, centerCol } = getShapeCenter(shape);
+
+                const parts = [];
+                for (const [r, c] of shape) {
+                    const dx = (c - centerCol) * BLOCK_SIZE;
+                    const dy = (r - centerRow) * BLOCK_SIZE;
+                    const block = Matter.Bodies.rectangle(dx, dy, COLLIDER_SIZE, COLLIDER_SIZE, {
+                        friction: 0.6,
+                        restitution: 0.01,
+                        density: 0.001,
+                        chamfer: { radius: 1 },
+                        frictionAir: 0.03
+                    });
+                    parts.push(block);
+                }
+
+                const body = Matter.Body.create({
+                    parts: parts,
+                    label: 'piece',
+                    friction: 0.6,
+                    restitution: 0.01
+                });
+
+                Matter.Body.setPosition(body, { x: centerX, y: centerY });
+                Matter.Body.setVelocity(body, { x: 0, y: 0 });
+                Matter.Body.setAngularVelocity(body, 0);
+                body.pieceType = type;
+                body.rotation = rotation;
+                return body;
+            }
+
+            function snapToGrid(type, centerX, centerY, rotation = 0) {
+                const shape = getCurrentShape(type, rotation);
+                const { centerRow, centerCol } = getShapeCenter(shape);
+                let minRow = Infinity, minCol = Infinity;
+                for (const [r, c] of shape) {
+                    if (r < minRow) minRow = r;
+                    if (c < minCol) minCol = c;
+                }
+                const leftTopX = centerX + (minCol - centerCol) * BLOCK_SIZE;
+                const leftTopY = centerY + (minRow - centerRow) * BLOCK_SIZE;
+                const snappedLeftTopX = Math.round(leftTopX / BLOCK_SIZE) * BLOCK_SIZE;
+                const snappedLeftTopY = Math.round(leftTopY / BLOCK_SIZE) * BLOCK_SIZE;
+                return {
+                    x: snappedLeftTopX - (minCol - centerCol) * BLOCK_SIZE,
+                    y: snappedLeftTopY - (minRow - centerRow) * BLOCK_SIZE
+                };
+            }
+
+            function isPlacementFree(type, centerX, centerY, rotation = 0, excludeBody = null) {
+                const shape = getCurrentShape(type, rotation);
+                const { centerRow, centerCol } = getShapeCenter(shape);
+
+                for (const [r, c] of shape) {
+                    const blockX = centerX + (c - centerCol) * BLOCK_SIZE;
+                    const blockY = centerY + (r - centerRow) * BLOCK_SIZE;
+                    const newRect = {
+                        left: blockX - COLLIDER_SIZE/2,
+                        right: blockX + COLLIDER_SIZE/2,
+                        top: blockY - COLLIDER_SIZE/2,
+                        bottom: blockY + COLLIDER_SIZE/2
+                    };
+
+                    for (const platformBody of platformBodies) {
+                        for (let i = 1; i < platformBody.parts.length; i++) {
+                            const part = platformBody.parts[i];
+                            const platformRect = {
+                                left: part.position.x - COLLIDER_SIZE/2,
+                                right: part.position.x + COLLIDER_SIZE/2,
+                                top: part.position.y - COLLIDER_SIZE/2,
+                                bottom: part.position.y + COLLIDER_SIZE/2
+                            };
+                            if (rectsIntersect(newRect, platformRect)) {
+                                return false;
+                            }
+                        }
+                    }
+
+                    for (const body of pieces) {
+                        if (body === excludeBody) continue;
+                        for (let i = 1; i < body.parts.length; i++) {
+                            const part = body.parts[i];
+                            const partRect = {
+                                left: part.position.x - COLLIDER_SIZE/2,
+                                right: part.position.x + COLLIDER_SIZE/2,
+                                top: part.position.y - COLLIDER_SIZE/2,
+                                bottom: part.position.y + COLLIDER_SIZE/2
+                            };
+                            if (rectsIntersect(newRect, partRect)) {
+                                const overlapX = Math.min(newRect.right, partRect.right) - Math.max(newRect.left, partRect.left);
+                                const overlapY = Math.min(newRect.bottom, partRect.bottom) - Math.max(newRect.top, partRect.top);
+                                if (overlapX > OVERLAP_TOLERANCE || overlapY > OVERLAP_TOLERANCE) return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+
+            function rectsIntersect(a, b) {
+                return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            }
+
+            function drawBlock(x, y, size, color, alpha = 1, angle = 0) {
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+                ctx.fillStyle = color;
+                ctx.fillRect(-size/2, -size/2, size, size);
+                ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-size/2, -size/2, size, size);
+                ctx.restore();
+            }
+
+            function drawPieceBody(body, alpha = 1) {
+                const color = COLORS[body.pieceType];
+                const angle = body.angle;
+                for (let i = 1; i < body.parts.length; i++) {
+                    const part = body.parts[i];
+                    drawBlock(part.position.x, part.position.y, BLOCK_SIZE, color, alpha, angle);
+                }
+            }
+
+            function drawShapePreview(type, centerX, centerY, rotation = 0, alpha = 0.6) {
+                const shape = getCurrentShape(type, rotation);
+                const { centerRow, centerCol } = getShapeCenter(shape);
+                const color = COLORS[type];
+                for (const [r, c] of shape) {
+                    const dx = (c - centerCol) * BLOCK_SIZE;
+                    const dy = (r - centerRow) * BLOCK_SIZE;
+                    drawBlock(centerX + dx, centerY + dy, BLOCK_SIZE, color, alpha);
+                }
+            }
+
+            function drawGrid() {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                ctx.lineWidth = 0.5;
+                for (let x = 0; x <= W; x += BLOCK_SIZE) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, GROUND_Y + PLATFORM_PIECE_SIZE * BLOCK_SIZE);
+                    ctx.stroke();
+                }
+                for (let y = 0; y <= GROUND_Y + PLATFORM_PIECE_SIZE * BLOCK_SIZE; y += BLOCK_SIZE) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(W, y);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawSlots() {
+                for (let i = 0; i < slots.length; i++) {
+                    const slot = slots[i];
+                    ctx.save();
+                    ctx.fillStyle = i === draggedSlotIndex ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)';
+                    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(slot.x - slot.width/2, slot.y - slot.height/2, slot.width, slot.height, 8);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+
+                    const miniBlock = BLOCK_SIZE * 0.6;
+                    const shape = getCurrentShape(slot.type, slot.rotation);
+                    const { centerRow, centerCol } = getShapeCenter(shape);
+                    const color = COLORS[slot.type];
+                    for (const [r, c] of shape) {
+                        const dx = (c - centerCol) * miniBlock;
+                        const dy = (r - centerRow) * miniBlock;
+                        drawBlock(slot.x + dx, slot.y + dy, miniBlock, color, 0.9);
+                    }
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                if (!gameInitialized) return;
+
+                drawGrid();
+
+                for (const platformBody of platformBodies) {
+                    for (let i = 1; i < platformBody.parts.length; i++) {
+                        const part = platformBody.parts[i];
+                        drawBlock(part.position.x, part.position.y, BLOCK_SIZE, '#8b4513', 1, 0);
+                    }
+                }
+
+                for (const body of pieces) {
+                    drawPieceBody(body, 1);
+                }
+
+                if (draggedSlotIndex >= 0 && slots[draggedSlotIndex]) {
+                    const slot = slots[draggedSlotIndex];
+                    const snapped = snapToGrid(slot.type, dragWorldPos.x, dragWorldPos.y, slot.rotation);
+                    if (isPlacementFree(slot.type, snapped.x, snapped.y, slot.rotation)) {
+                        drawShapePreview(slot.type, snapped.x, snapped.y, slot.rotation, 0.6);
+                    } else {
+                        drawShapePreview(slot.type, snapped.x, snapped.y, slot.rotation, 0.2);
+                    }
+                }
+
+                drawSlots();
+            }
+
+            function checkGameOver() {
+                if (!gameRunning) return;
+                for (const body of pieces) {
+                    for (let i = 1; i < body.parts.length; i++) {
+                        const p = body.parts[i];
+                        if (p.position.y < TOP_LIMIT || p.position.x < -50 || p.position.x > W + 50) {
+                            gameRunning = false;
+                            stopMusic();
+                            playGameOverSound();
+                            gameOverScreen.classList.remove('hidden');
+                            return;
+                        }
+                    }
+                }
+            }
+
+            function startNewGame() {
+                for (const body of pieces) {
+                    Matter.Composite.remove(world, body);
+                }
+                pieces = [];
+                draggedSlotIndex = -1;
+                gameRunning = true;
+                gameInitialized = true;
+                initSlots();
+                gameOverScreen.classList.add('hidden');
+                menuScreen.classList.add('hidden');
+                settingsScreen.classList.add('hidden');
+                if (musicEnabled) startMusic();
+            }
+
+            function getTouchPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                let touch;
+                if (e.touches && e.touches.length > 0) {
+                    touch = e.touches[0];
+                } else if (e.changedTouches && e.changedTouches.length > 0) {
+                    touch = e.changedTouches[0];
+                } else {
+                    return null;
+                }
+                return {
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top
+                };
+            }
+
+            function isPointInSlot(sx, sy) {
+                for (let i = 0; i < slots.length; i++) {
+                    const s = slots[i];
+                    if (sx >= s.x - s.width/2 && sx <= s.x + s.width/2 &&
+                        sy >= s.y - s.height/2 && sy <= s.y + s.height/2) {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+
+            let lastTapTime = 0;
+            let lastTapSlot = -1;
+
+            function handleTouchStart(e) {
+                if (!gameRunning || !gameInitialized) return;
+                e.preventDefault();
+                const pos = getTouchPos(e);
+                if (!pos) return;
+                const slotIndex = isPointInSlot(pos.x, pos.y);
+                if (slotIndex >= 0) {
+                    const now = Date.now();
+                    if (now - lastTapTime < 300 && lastTapSlot === slotIndex) {
+                        slots[slotIndex].rotation = (slots[slotIndex].rotation + 1) % 4;
+                        lastTapTime = 0;
+                        return;
+                    }
+                    lastTapTime = now;
+                    lastTapSlot = slotIndex;
+                    draggedSlotIndex = slotIndex;
+                    dragWorldPos = { x: pos.x, y: pos.y };
+                }
+            }
+
+            function handleTouchMove(e) {
+                if (draggedSlotIndex < 0) return;
+                e.preventDefault();
+                const pos = getTouchPos(e);
+                if (!pos) return;
+                dragWorldPos = { x: pos.x, y: pos.y };
+            }
+
+            function handleTouchEnd(e) {
+                if (draggedSlotIndex < 0) {
+                    draggedSlotIndex = -1;
+                    return;
+                }
+                e.preventDefault();
+                const pos = getTouchPos(e);
+                if (!pos) {
+                    draggedSlotIndex = -1;
+                    return;
+                }
+                const worldX = pos.x;
+                const worldY = pos.y;
+                const slot = slots[draggedSlotIndex];
+                const snapped = snapToGrid(slot.type, worldX, worldY, slot.rotation);
+
+                if (worldY < GROUND_Y - 10 && isPlacementFree(slot.type, snapped.x, snapped.y, slot.rotation)) {
+                    const newPiece = createPiece(slot.type, snapped.x, snapped.y, slot.rotation);
+                    Matter.Composite.add(world, newPiece);
+                    pieces.push(newPiece);
+                    slot.type = randomShapeType();
+                    slot.rotation = 0;
+                    playPlaceSound();
+                }
+                draggedSlotIndex = -1;
+            }
+
+            let mouseDragging = false;
+
+            function handleMouseDown(e) {
+                if (!gameRunning || !gameInitialized) return;
+                const rect = canvas.getBoundingClientRect();
+                const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                const slotIndex = isPointInSlot(pos.x, pos.y);
+                if (slotIndex >= 0) {
+                    const now = Date.now();
+                    if (now - lastTapTime < 300 && lastTapSlot === slotIndex) {
+                        slots[slotIndex].rotation = (slots[slotIndex].rotation + 1) % 4;
+                        lastTapTime = 0;
+                        return;
+                    }
+                    lastTapTime = now;
+                    lastTapSlot = slotIndex;
+                    draggedSlotIndex = slotIndex;
+                    dragWorldPos = { x: pos.x, y: pos.y };
+                    mouseDragging = true;
+                }
+            }
+
+            function handleMouseMove(e) {
+                if (!mouseDragging || draggedSlotIndex < 0) return;
+                const rect = canvas.getBoundingClientRect();
+                const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                dragWorldPos = { x: pos.x, y: pos.y };
+            }
+
+            function handleMouseUp(e) {
+                if (!mouseDragging || draggedSlotIndex < 0) {
+                    mouseDragging = false;
+                    draggedSlotIndex = -1;
+                    return;
+                }
+                const rect = canvas.getBoundingClientRect();
+                const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                const worldX = pos.x;
+                const worldY = pos.y;
+                const slot = slots[draggedSlotIndex];
+                const snapped = snapToGrid(slot.type, worldX, worldY, slot.rotation);
+                if (worldY < GROUND_Y - 10 && isPlacementFree(slot.type, snapped.x, snapped.y, slot.rotation)) {
+                    const newPiece = createPiece(slot.type, snapped.x, snapped.y, slot.rotation);
+                    Matter.Composite.add(world, newPiece);
+                    pieces.push(newPiece);
+                    slot.type = randomShapeType();
+                    slot.rotation = 0;
+                    playPlaceSound();
+                }
+                draggedSlotIndex = -1;
+                mouseDragging = false;
+            }
+
+            function gameLoop() {
+                if (gameRunning && gameInitialized) {
+                    Matter.Engine.update(engine, 1000 / 60);
+                    checkGameOver();
+                }
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            function initPlatform() {
+                const centerY = GROUND_Y + BLOCK_SIZE;
+                for (let i = 0; i < PLATFORM_COUNT; i++) {
+                    const centerX = PLATFORM_LEFT + BLOCK_SIZE * (i * PLATFORM_PIECE_SIZE + 1);
+                    const shape = SHAPES.O;
+                    const { centerRow, centerCol } = getShapeCenter(shape);
+                    const parts = [];
+                    for (const [r, c] of shape) {
+                        const dx = (c - centerCol) * BLOCK_SIZE;
+                        const dy = (r - centerRow) * BLOCK_SIZE;
+                        const block = Matter.Bodies.rectangle(dx, dy, COLLIDER_SIZE, COLLIDER_SIZE, {
+                            isStatic: true,
+                            friction: 0.8,
+                            restitution: 0,
+                            chamfer: { radius: 1 }
+                        });
+                        parts.push(block);
+                    }
+                    const body = Matter.Body.create({
+                        parts: parts,
+                        isStatic: true,
+                        label: 'platform'
+                    });
+                    Matter.Body.setPosition(body, { x: centerX, y: centerY });
+                    Matter.Composite.add(world, body);
+                    platformBodies.push(body);
+                }
+            }
+
+            // Универсальная обработка нажатий для кнопок (click для ПК, touchend для мобильных)
+            function setupButton(btn, handler) {
+                btn.addEventListener('click', handler);
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    handler();
+                }, { passive: false });
+            }
+
+            function init() {
+                initPlatform();
+
+                canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+                document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                document.addEventListener('touchend', handleTouchEnd, { passive: false });
+                document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+                canvas.addEventListener('mousedown', handleMouseDown);
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+
+                // Настраиваем кнопки
+                setupButton(playBtn, startNewGame);
+                setupButton(settingsBtn, () => {
+                    menuScreen.classList.add('hidden');
+                    settingsScreen.classList.remove('hidden');
+                });
+                setupButton(backBtn, () => {
+                    settingsScreen.classList.add('hidden');
+                    menuScreen.classList.remove('hidden');
+                });
+                setupButton(restartBtn, startNewGame);
+                setupButton(menuBtn, () => {
+                    gameRunning = false;
+                    gameInitialized = false;
+                    gameOverScreen.classList.add('hidden');
+                    menuScreen.classList.remove('hidden');
+                    stopMusic();
+                    for (const body of pieces) Matter.Composite.remove(world, body);
+                    pieces = [];
+                });
+
+                setupButton(musicToggle, () => {
+                    musicEnabled = !musicEnabled;
+                    musicToggle.classList.toggle('active', musicEnabled);
+                    if (musicEnabled) startMusic();
+                    else stopMusic();
+                });
+                setupButton(placeSoundToggle, () => {
+                    placeSoundEnabled = !placeSoundEnabled;
+                    placeSoundToggle.classList.toggle('active', placeSoundEnabled);
+                });
+                setupButton(gameOverSoundToggle, () => {
+                    gameOverSoundEnabled = !gameOverSoundEnabled;
+                    gameOverSoundToggle.classList.toggle('active', gameOverSoundEnabled);
+                });
+
+                gameLoop();
+            }
+
+            init();
+        })();
+    </script>
+</body>
+</html>
