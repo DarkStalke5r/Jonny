@@ -1,8 +1,8 @@
-<?xml version='1.0' encoding='utf-8'?>
-<widget id="com.example.testapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
-    <name>TestApp</name>
+<?xml version='0.404' encoding='utf-8'?>
+<widget id="com.example.testapp" version="0.4.04" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>гⷮлⷬаⷶдⷯиⷶтⷮьꙺ</name>
     <description>Тестовое приложение для проверки сборки Cordova в GitHub Actions</description>
-    <author email="dev@example.com" href="https://example.com">
+    <author email="aa@" href="https://example.com">
         Developer
     </author>
     <content src="index.html" />
